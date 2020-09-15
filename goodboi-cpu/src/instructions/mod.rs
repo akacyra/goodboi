@@ -91,36 +91,6 @@ impl Display for Condition {
     }
 }
 
-/// Arithmetic and logic operations.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum ALU {
-    Add,
-    AddC,
-    Sub,
-    SubC,
-    And,
-    Xor,
-    Or,
-    Compare,
-}
-
-impl Display for ALU {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use ALU::*;
-        let name = match self {
-            Add => "ADD",
-            AddC => "ADC",
-            Sub => "SUB",
-            SubC => "SBC",
-            And => "AND",
-            Xor => "XOR",
-            Or => "OR",
-            Compare => "CP",
-        };
-        write!(f, "{}", name)
-    }
-}
-
 /// The Game Boy has a 16-bit address bus.
 pub type Address = u16;
 
@@ -131,24 +101,38 @@ pub type Address = u16;
 /// * r16 - 16-bit register pairs (BC, DE, HL)
 /// * n8  - 8-bit integer constant
 /// * n16 - 16-bit integer constant
-/// * e8  - 8-bit signed offset
+/// * r8  - 8-bit signed offset
 /// * u3  - 3-bit unsigned integer constant
 /// * cc  - condition codes (Z, NZ, C, NC)
 /// * vec - one of the reset vectors (0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38)
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Operation {
+    /// ADD A, r8
+    Add(Register),
+    /// ADC A, r8
+    AddCarry(Register),
+    /// ADC A, n8
+    AddCarryImmediate(u8),
+    /// ADD A, n8
+    AddImmediate(u8),
     /// ADD SP, e8
     AddToSP(i8),
     /// ADD HL, r16
     AddToHL(RegisterPair),
-    /// ADD/ADC/SUB/SUBC/AND/XOR/OR/CP A, r8/(HL)
-    ALU(ALU, Register),
-    /// ADD/ADC/SUB/SUBC/AND/XOR/OR/CP A, n8
-    ALUImm(ALU, u8),
+    /// AND A, r8
+    And(Register),
+    /// AND A, n8
+    AndImmediate(u8),
+    /// BIT u3, r8
+    Bit(u8, Register),
     /// CALL n16
     Call(Address),
     /// CALL cc, n16
     CallCond(Condition, Address),
+    /// CP A, r8
+    Compare(Register),
+    /// CP A, n8
+    CompareImmediate(u8),
     /// CPL
     Complement,
     /// CCF
@@ -210,51 +194,94 @@ pub enum Operation {
     /// LD A, ($FF00+C)
     LoadIOToA,
     /// LD r8, n8
-    LoadImm(Register, u8),
+    LoadImmediate(Register, u8),
     /// LD r16, n16
-    LoadPair(RegisterPair, u16),
+    LoadPairImmediate(RegisterPair, u16),
     /// LD HL, SP+e8
     LoadSPOffsetToHL(i8),
     /// LD (n16), SP
     LoadSPToIndirect(Address),
     /// NOP
     NoOp,
+    /// OR A, r8
+    Or(Register),
+    /// OR A, n8
+    OrImmediate(u8),
     /// POP r16
     Pop(RegisterPair),
     /// PUSH r16
     Push(RegisterPair),
     /// RST vec
     Reset(u8),
+    /// RES u3, r8
+    ResetBit(u8, Register),
     /// RET
     Return,
     /// RET cc
     ReturnCond(Condition),
     /// RETI
     ReturnInterrupt,
+    /// RL r8
+    RotateLeft(Register),
     /// RLA
     RotateLeftA,
+    /// RLC r8
+    RotateLeftCircular(Register),
     /// RLCA
     RotateLeftCircularA,
+    // RR r8
+    RotateRight(Register),
     /// RRA
     RotateRightA,
+    /// RRC r8
+    RotateRightCircular(Register),
     /// RRCA
     RotateRightCircularA,
+    /// SET u3, r8
+    SetBit(u8, Register),
     /// SCF
     SetCarry,
+    /// SLA r8
+    ShiftLeft(Register),
+    /// SRA r8
+    ShiftRight(Register),
+    /// SRL r8
+    ShiftRightLogic(Register),
     /// STOP
     Stop,
+    /// SUB A, r8
+    Subtract(Register),
+    /// SBC A, r8
+    SubtractCarry(Register),
+    /// SBC A, n8
+    SubtractCarryImmediate(u8),
+    /// SUB A, n8
+    SubtractImmediate(u8),
+    // SWAP r8
+    Swap(Register),
+    /// XOR A, r8
+    Xor(Register),
+    /// XOR A, n8
+    XorImmediate(u8),
 }
 
 impl Display for Operation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Operation::*;
         match self {
+            Add(reg) => write!(f, "ADD A, {}", reg),
+            AddCarry(reg) => write!(f, "ADC A, {}", reg),
+            AddCarryImmediate(n) => write!(f, "ADC A, ${:02X}", n),
+            AddImmediate(n) => write!(f, "ADD A, ${:02X}", n),
             AddToSP(offset) => write!(f, "ADD SP, ${:02X}", offset),
             AddToHL(pair) => write!(f, "ADD HL, {}", pair),
-            ALU(alu, reg) => write!(f, "{} A, {}", alu, reg),
-            ALUImm(alu, n) => write!(f, "{} A, ${:02X}", alu, n),
+            And(reg) => write!(f, "AND A, {}", reg),
+            AndImmediate(n) => write!(f, "AND A, ${:02X}", n),
+            Bit(pos, reg) => write!(f, "BIT {}, {}", pos, reg),
             Call(addr) => write!(f, "CALL ${:04X}", addr),
             CallCond(cond, addr) => write!(f, "CALL {}, ${:04X}", cond, addr),
+            Compare(reg) => write!(f, "CP A, {}", reg),
+            CompareImmediate(n) => write!(f, "CP A, ${:02X}", n),
             Complement => write!(f, "CPL"),
             ComplementCarry => write!(f, "CCF"),
             DecimalAdjust => write!(f, "DAA"),
@@ -284,24 +311,42 @@ impl Display for Operation {
             LoadIndirectToA(addr) => write!(f, "LD A, (${:04X})", addr),
             LoadIOOffsetToA(offset) => write!(f, "LD A, ($FF00+${:02X})", offset),
             LoadIOToA => write!(f, "LD A, ($FF00+C)"),
-            LoadImm(reg, n) => write!(f, "LD {}, ${:02X}", reg, n),
-            LoadPair(pair, n) => write!(f, "LD {}, ${:04X}", pair, n),
+            LoadImmediate(reg, n) => write!(f, "LD {}, ${:02X}", reg, n),
+            LoadPairImmediate(pair, n) => write!(f, "LD {}, ${:04X}", pair, n),
             LoadPairToA(pair) => write!(f, "LD A, ({})", pair),
             LoadSPOffsetToHL(offset) => write!(f, "LD HL, SP+${:02X}", offset),
             LoadSPToIndirect(addr) => write!(f, "LD (${:04X}), SP", addr),
             NoOp => write!(f, "NOP"),
+            Or(reg) => write!(f, "OR A, {}", reg),
+            OrImmediate(n) => write!(f, "OR A, ${:02X}", n),
             Pop(pair) => write!(f, "POP {}", pair),
             Push(pair) => write!(f, "PUSH {}", pair),
             Reset(addr) => write!(f, "RST ${:02X}", addr),
+            ResetBit(pos, reg) => write!(f, "RES {}, {}", pos, reg),
             Return => write!(f, "RET"),
             ReturnCond(cond) => write!(f, "RET {}", cond),
             ReturnInterrupt => write!(f, "RETI"),
+            RotateLeft(reg) => write!(f, "RL {}", reg),
             RotateLeftA => write!(f, "RLA"),
+            RotateLeftCircular(reg) => write!(f, "RLC {}", reg),
             RotateLeftCircularA => write!(f, "RLCA"),
+            RotateRight(reg) => write!(f, "RR {}", reg),
             RotateRightA => write!(f, "RRA"),
+            RotateRightCircular(reg) => write!(f, "RRC {}", reg),
             RotateRightCircularA => write!(f, "RRCA"),
+            SetBit(pos, reg) => write!(f, "SET {}, {}", pos, reg),
             SetCarry => write!(f, "SCF"),
+            ShiftLeft(reg) => write!(f, "SLA {}", reg),
+            ShiftRight(reg) => write!(f, "SRA {}", reg),
+            ShiftRightLogic(reg) => write!(f, "SRL {}", reg),
             Stop => write!(f, "STOP"),
+            Subtract(reg) => write!(f, "SUB A, {}", reg),
+            SubtractCarry(reg) => write!(f, "SBC A, {}", reg),
+            SubtractCarryImmediate(n) => write!(f, "SBC A, ${:02X}", n),
+            SubtractImmediate(n) => write!(f, "SUB A, ${:02X}", n),
+            Swap(reg) => write!(f, "SWAP {}", reg),
+            Xor(reg) => write!(f, "XOR A, {}", reg),
+            XorImmediate(n) => write!(f, "XOR A, ${:02X}", n),
         }
     }
 }
@@ -349,7 +394,7 @@ impl Instruction {
 ///
 /// Basic usage:
 /// ```
-/// # use goodboi_cpu::instructions::{Instructions, Instruction, Operation::{LoadImm, NoOp}, Register::B};
+/// # use goodboi_cpu::instructions::{Instructions, Instruction, Operation::{LoadImmediate, NoOp}, Register::B};
 ///
 /// // Create a decoding iterator.
 /// let mut instructions: Instructions<_> = vec![0x00, 0x06, 0x12].into_iter().into();
@@ -357,7 +402,7 @@ impl Instruction {
 /// // next() decodes the next instruction.
 /// assert_eq!(Some(Instruction { operation: NoOp, bytes: 1, cycles: 4, cycles_taken: None }), instructions.next());
 /// // Some instructions will consume multiple bytes from the iterator.
-/// assert_eq!(Some(Instruction { operation: LoadImm(B, 0x12), bytes: 2, cycles: 8, cycles_taken: None }), instructions.next());
+/// assert_eq!(Some(Instruction { operation: LoadImmediate(B, 0x12), bytes: 2, cycles: 8, cycles_taken: None }), instructions.next());
 /// // `None` is returned when there are not enough bytes left to decode a valid instruction.
 /// assert_eq!(None, instructions.next());
 /// ```
