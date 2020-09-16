@@ -11,8 +11,16 @@ fn next_word(iter: &mut impl Iterator<Item = u8>) -> Option<u16> {
 /// Decodes a byte sequence from an iterator to an [`Instruction`](Instruction).
 /// Returns `None` if there are not enough bytes left in the `Iterator` to decode a valid instruction.
 pub fn decode(bytes: &mut impl Iterator<Item = u8>) -> Option<Instruction> {
-    use self::{Condition::*, Operation::*, Register::*, RegisterPair::*};
     let opcode = bytes.next()?;
+    if opcode == 0xCB {
+        decode_cbprefixed(bytes)
+    } else {
+        decode_unprefixed(opcode, bytes)
+    }
+}
+
+fn decode_unprefixed(opcode: u8, bytes: &mut impl Iterator<Item = u8>) -> Option<Instruction> {
+    use self::{Condition::*, Operation::*, Register::*, RegisterPair::*};
     Some(match opcode {
         0x00 => Instruction::new(NoOp, 1, 4),
         0x01 => Instruction::new(LoadPairImmediate(BC, next_word(bytes)?), 3, 12),
@@ -260,6 +268,62 @@ pub fn decode(bytes: &mut impl Iterator<Item = u8>) -> Option<Instruction> {
         0xFF => Instruction::new(Reset(0x38), 1, 16),
         _ => Instruction::INVALID,
     })
+}
+
+pub fn decode_cbprefixed(bytes: &mut impl Iterator<Item = u8>) -> Option<Instruction> {
+    use super::{Operation::*, Register::*};
+    let opcode = bytes.next()?;
+    let x = opcode >> 6;
+    let y = (opcode >> 3) & 0b111;
+    let register = decode_register(opcode);
+    Some(match x {
+        0 => {
+            let operation = match y {
+                0 => RotateLeftCircular(register),
+                1 => RotateRightCircular(register),
+                2 => RotateLeft(register),
+                3 => RotateRight(register),
+                4 => ShiftLeft(register),
+                5 => ShiftRight(register),
+                6 => Swap(register),
+                7 => ShiftRightLogic(register),
+                _ => unreachable!(),
+            };
+            let cycles = if register == HLIndirect { 16 } else { 8 };
+            Instruction::new(operation, 2, cycles)
+        }
+        1 => Instruction::new(
+            Bit(y, register),
+            2,
+            if register == HLIndirect { 12 } else { 8 },
+        ),
+        2 => Instruction::new(
+            ResetBit(y, register),
+            2,
+            if register == HLIndirect { 16 } else { 8 },
+        ),
+        3 => Instruction::new(
+            SetBit(y, register),
+            2,
+            if register == HLIndirect { 16 } else { 8 },
+        ),
+        _ => unreachable!(),
+    })
+}
+
+fn decode_register(value: u8) -> Register {
+    use Register::*;
+    match value & 0b111 {
+        0 => B,
+        1 => C,
+        2 => D,
+        3 => E,
+        4 => H,
+        5 => L,
+        6 => HLIndirect,
+        7 => A,
+        _ => unreachable!(),
+    }
 }
 
 #[cfg(test)]

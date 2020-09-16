@@ -394,47 +394,22 @@ impl Instruction {
 ///
 /// Basic usage:
 /// ```
-/// # use goodboi_cpu::instructions::{Instructions, Instruction, Operation::{LoadImmediate, NoOp}, Register::B};
+/// # use goodboi_cpu::instructions::{decoder_iter, Instruction, Operation::{LoadImmediate, NoOp}, Register::B};
 ///
 /// // Create a decoding iterator.
-/// let mut instructions: Instructions<_> = vec![0x00, 0x06, 0x12].into_iter().into();
+/// let mut bytes: Vec<u8> = vec![0x00, 0x06, 0x12];
+/// let mut decoder = decoder_iter(bytes.into_iter());
 ///
 /// // next() decodes the next instruction.
-/// assert_eq!(Some(Instruction { operation: NoOp, bytes: 1, cycles: 4, cycles_taken: None }), instructions.next());
+/// assert_eq!(Some(Instruction { operation: NoOp, bytes: 1, cycles: 4, cycles_taken: None }), decoder.next());
 /// // Some instructions will consume multiple bytes from the iterator.
-/// assert_eq!(Some(Instruction { operation: LoadImmediate(B, 0x12), bytes: 2, cycles: 8, cycles_taken: None }), instructions.next());
+/// assert_eq!(Some(Instruction { operation: LoadImmediate(B, 0x12), bytes: 2, cycles: 8, cycles_taken: None }), decoder.next());
 /// // `None` is returned when there are not enough bytes left to decode a valid instruction.
-/// assert_eq!(None, instructions.next());
+/// assert_eq!(None, decoder.next());
 /// ```
-pub struct Instructions<I: Iterator<Item = u8>> {
-    iter: I,
-}
-
-impl<I> Instructions<I>
+pub fn decoder_iter<I>(mut iter: I) -> impl Iterator<Item = Instruction>
 where
     I: Iterator<Item = u8>,
 {
-    pub fn new(iter: I) -> Self {
-        Self { iter }
-    }
-}
-
-impl<I> Iterator for Instructions<I>
-where
-    I: Iterator<Item = u8>,
-{
-    type Item = Instruction;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        decode(&mut self.iter)
-    }
-}
-
-impl<I> From<I> for Instructions<I>
-where
-    I: Iterator<Item = u8>,
-{
-    fn from(iter: I) -> Self {
-        Instructions { iter }
-    }
+    std::iter::from_fn(move || decode(&mut iter))
 }
