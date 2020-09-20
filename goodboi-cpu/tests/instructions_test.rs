@@ -45,15 +45,15 @@ fn load_tables() -> HashMap<String, InstructionTable> {
 
 fn test_instructions_decoded_correctly(table: &InstructionTable, prefix: Option<u8>) {
     let decoded: BTreeMap<_, _> = (0..=255)
-        .filter_map(|opcode| {
+        .map(|opcode| {
             let mut bytes = prefix.map(|prefix| vec![prefix]).unwrap_or_else(Vec::new);
             bytes.push(opcode);
             bytes.push(0x34);
             bytes.push(0x12);
-            Some((
+            (
                 opcode,
                 instructions::decode(&mut bytes.into_iter()).unwrap(),
-            ))
+            )
         })
         .collect();
 
