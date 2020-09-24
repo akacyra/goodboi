@@ -6,6 +6,7 @@ mod decode;
 
 pub use decode::decode;
 
+use super::Address;
 use std::fmt::Display;
 
 /// 8-bit register and register-like locations.
@@ -90,9 +91,6 @@ impl Display for Condition {
         write!(f, "{}", name)
     }
 }
-
-/// The Game Boy has a 16-bit address bus.
-pub type Address = u16;
 
 /// Operations that an instruction can perform.
 ///
@@ -394,7 +392,7 @@ impl Instruction {
 ///
 /// Basic usage:
 /// ```
-/// # use goodboi_cpu::instructions::{decoder_iter, Instruction, Operation::{LoadImmediate, NoOp}, Register::B};
+/// # use goodboi_hardware::cpu::instructions::{decoder_iter, Instruction, Operation::{LoadImmediate, NoOp}, Register::B};
 ///
 /// // Create a decoding iterator.
 /// let mut bytes: Vec<u8> = vec![0x00, 0x06, 0x12];

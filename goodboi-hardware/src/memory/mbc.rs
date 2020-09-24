@@ -2,7 +2,7 @@
 //!
 //! The Game Boy only has a 16-bit address bus, so MBCs are used in the cartridge to expand the availabe address space using memory banking.
 
-use crate::MemoryMapped;
+use super::MemoryMapped;
 
 /// ROM banks are 16KB.
 const ROM_BANK_SIZE: u32 = 16 * 1024;

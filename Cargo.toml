@@ -1,5 +1,4 @@
 [workspace]
 members = [
-    "goodboi-cpu",
-    "goodboi-memory"
+    "goodboi-hardware"
 ]

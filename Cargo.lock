@@ -7,18 +7,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46afbd2983a5d5a7bd740ccb198caf5b82f45c40c09c0eed36052d91cb92e719"
 
 [[package]]
-name = "goodboi-cpu"
+name = "goodboi-hardware"
 version = "0.1.0"
 dependencies = [
  "bitfield",
- "goodboi-memory",
  "serde",
  "serde_json",
 ]
-
-[[package]]
-name = "goodboi-memory"
-version = "0.1.0"
 
 [[package]]
 name = "itoa"

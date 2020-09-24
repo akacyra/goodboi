@@ -1,4 +1,4 @@
-use goodboi_memory::Cartridge;
+use goodboi_hardware::memory::Cartridge;
 
 fn main() {
     let mut args = std::env::args().skip(1);

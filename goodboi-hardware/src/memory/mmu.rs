@@ -2,7 +2,7 @@
 //!
 //! The MMU maps the Game Boy's 16-bit address space to hardware.
 
-use crate::{Cartridge, MemoryMapped};
+use super::{Cartridge, MemoryMapped};
 
 pub const WORK_RAM_SIZE: usize = 8 * 1024;
 pub const HIGH_RAM_SIZE: usize = 127;

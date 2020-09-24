@@ -2,7 +2,7 @@
 
 use std::{collections::HashSet, fs, path::Path};
 
-use crate::{mbc::MBC1, MemoryMapped};
+use super::{mbc::MBC1, MemoryMapped};
 
 /// External hardware that a `Cartridge` can have.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

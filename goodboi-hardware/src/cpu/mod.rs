@@ -1,8 +1,8 @@
-use bitfield::bitfield;
-use goodboi_memory::MemoryMapped;
-use instructions::{Address, Condition, Instruction, Operation, Register};
-
 pub mod instructions;
+
+use crate::memory::MemoryMapped;
+use bitfield::bitfield;
+use instructions::{Condition, Instruction, Operation, Register};
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq)]
@@ -41,8 +41,10 @@ pub enum State {
     Halted,
 }
 
-type ProgramCounter = u16;
-type Cycles = u32;
+/// The Game Boy has a 16-bit address bus.
+pub type Address = u16;
+pub type ProgramCounter = u16;
+pub type Cycles = u32;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct CPU {

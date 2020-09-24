@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap};
 
-use goodboi_cpu::instructions::{self, Instruction};
+use goodboi_hardware::cpu::instructions::{self, Instruction};
 
 const INSTRUCTION_TABLES_JSON: &str = std::include_str!("data/instructions.json");
 
