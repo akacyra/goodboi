@@ -1,4 +1,5 @@
 use bitfield::bitfield;
+use goodboi_memory::MemoryMapped;
 use instructions::{Address, Condition, Instruction, Operation, Register};
 
 pub mod instructions;
@@ -30,20 +31,6 @@ impl RegisterAndFlags {
         self.set_subtract(false);
         self.set_half_carry(false);
         self.set_carry(false);
-    }
-}
-
-pub trait Memory {
-    fn read_byte(&self, address: Address) -> u8;
-    fn read_word(&self, address: Address) -> u16 {
-        let low = self.read_byte(address) as u16;
-        let high = self.read_byte(address.wrapping_add(1)) as u16;
-        high << 8 | low
-    }
-    fn write_byte(&mut self, address: Address, value: u8);
-    fn write_word(&mut self, address: Address, value: u16) {
-        self.write_byte(address, value as u8);
-        self.write_byte(address.wrapping_add(1), (value >> 8) as u8);
     }
 }
 
@@ -83,7 +70,7 @@ impl CPU {
         }
     }
 
-    pub fn pc_iter<'a>(&self, memory: &'a impl Memory) -> impl Iterator<Item = u8> + 'a {
+    pub fn pc_iter<'a>(&self, memory: &'a impl MemoryMapped) -> impl Iterator<Item = u8> + 'a {
         let mut pc = self.pc;
         std::iter::from_fn(move || {
             let value = memory.read_byte(pc);
@@ -92,12 +79,13 @@ impl CPU {
         })
     }
 
-    pub fn step(&mut self, memory: &mut impl Memory) -> Cycles {
+    pub fn step(&mut self, memory: &mut impl MemoryMapped) -> Cycles {
         if self.state == State::Running {
             let instruction = {
                 let mut pc_iter = self.pc_iter(memory);
                 instructions::decode(&mut pc_iter).expect("Failed to decode instruction")
             };
+            //println!("PC={:04X}, Op={}", self.pc, instruction.operation);
             let (next_pc, cycles) = self.execute(instruction, memory);
             self.pc = next_pc;
             cycles
@@ -109,7 +97,7 @@ impl CPU {
     fn execute(
         &mut self,
         instruction: Instruction,
-        memory: &mut impl Memory,
+        memory: &mut impl MemoryMapped,
     ) -> (ProgramCounter, Cycles) {
         use Operation::*;
         match instruction.operation {
@@ -269,7 +257,7 @@ impl CPU {
         self.af.set_carry(value > a);
     }
 
-    fn increment(&mut self, register: Register, memory: &mut impl Memory) {
+    fn increment(&mut self, register: Register, memory: &mut impl MemoryMapped) {
         let value = self.get_register(register, memory);
         let new_value = value.wrapping_add(1);
         self.set_register(register, new_value, memory);
@@ -278,7 +266,7 @@ impl CPU {
         self.af.set_half_carry(value & 0xF == 0xF);
     }
 
-    fn decrement(&mut self, register: Register, memory: &mut impl Memory) {
+    fn decrement(&mut self, register: Register, memory: &mut impl MemoryMapped) {
         let value = self.get_register(register, memory);
         let new_value = value.wrapping_sub(1);
         self.set_register(register, new_value, memory);
@@ -299,56 +287,64 @@ impl CPU {
         self.af.set_half_carry(true);
     }
 
-    fn load(&mut self, dest: Register, source: Register, memory: &mut impl Memory) {
+    fn load(&mut self, dest: Register, source: Register, memory: &mut impl MemoryMapped) {
         self.set_register(dest, self.get_register(source, memory), memory);
     }
 
-    fn load_a_to_pair(&self, register_pair: instructions::RegisterPair, memory: &mut impl Memory) {
+    fn load_a_to_pair(
+        &self,
+        register_pair: instructions::RegisterPair,
+        memory: &mut impl MemoryMapped,
+    ) {
         memory.write_byte(self.get_register_pair(register_pair), self.af.high());
     }
 
-    fn load_pair_to_a(&mut self, register_pair: instructions::RegisterPair, memory: &impl Memory) {
+    fn load_pair_to_a(
+        &mut self,
+        register_pair: instructions::RegisterPair,
+        memory: &impl MemoryMapped,
+    ) {
         self.af
             .set_high(memory.read_byte(self.get_register_pair(register_pair)));
     }
 
-    fn load_a_to_hld(&mut self, memory: &mut impl Memory) {
+    fn load_a_to_hld(&mut self, memory: &mut impl MemoryMapped) {
         let addr = self.hl.0;
         memory.write_byte(addr, self.af.high());
         self.hl.0 = addr.wrapping_sub(1);
     }
 
-    fn load_a_to_hli(&mut self, memory: &mut impl Memory) {
+    fn load_a_to_hli(&mut self, memory: &mut impl MemoryMapped) {
         let addr = self.hl.0;
         memory.write_byte(addr, self.af.high());
         self.hl.0 = addr.wrapping_add(1);
     }
 
-    fn load_hld_to_a(&mut self, memory: &impl Memory) {
+    fn load_hld_to_a(&mut self, memory: &impl MemoryMapped) {
         let addr = self.hl.0;
         self.af.set_high(memory.read_byte(addr));
         self.hl.0 = addr.wrapping_sub(1);
     }
 
-    fn load_hli_to_a(&mut self, memory: &impl Memory) {
+    fn load_hli_to_a(&mut self, memory: &impl MemoryMapped) {
         let addr = self.hl.0;
         self.af.set_high(memory.read_byte(addr));
         self.hl.0 = addr.wrapping_add(1);
     }
 
-    fn load_a_to_io(&self, offset: u8, memory: &mut impl Memory) {
+    fn load_a_to_io(&self, offset: u8, memory: &mut impl MemoryMapped) {
         self.load_a_to_indirect(0xFF00 + offset as u16, memory);
     }
 
-    fn load_io_to_a(&mut self, offset: u8, memory: &impl Memory) {
+    fn load_io_to_a(&mut self, offset: u8, memory: &impl MemoryMapped) {
         self.load_indirect_to_a(0xFF00 + offset as u16, memory)
     }
 
-    fn load_a_to_indirect(&self, address: u16, memory: &mut impl Memory) {
+    fn load_a_to_indirect(&self, address: u16, memory: &mut impl MemoryMapped) {
         memory.write_byte(address, self.af.high());
     }
 
-    fn load_indirect_to_a(&mut self, address: u16, memory: &impl Memory) {
+    fn load_indirect_to_a(&mut self, address: u16, memory: &impl MemoryMapped) {
         self.af.set_high(memory.read_byte(address));
     }
 
@@ -366,12 +362,12 @@ impl CPU {
         }
     }
 
-    fn push(&mut self, value: u16, memory: &mut impl Memory) {
+    fn push(&mut self, value: u16, memory: &mut impl MemoryMapped) {
         self.sp = self.sp.wrapping_sub(2);
         memory.write_word(self.sp, value);
     }
 
-    fn pop(&mut self, memory: &impl Memory) -> u16 {
+    fn pop(&mut self, memory: &impl MemoryMapped) -> u16 {
         let value = memory.read_word(self.sp);
         self.sp = self.sp.wrapping_add(2);
         value
@@ -380,7 +376,7 @@ impl CPU {
     fn push_register_pair(
         &mut self,
         register_pair: instructions::RegisterPair,
-        memory: &mut impl Memory,
+        memory: &mut impl MemoryMapped,
     ) {
         self.push(self.get_register_pair(register_pair), memory);
     }
@@ -388,7 +384,7 @@ impl CPU {
     fn pop_register_pair(
         &mut self,
         register_pair: instructions::RegisterPair,
-        memory: &impl Memory,
+        memory: &impl MemoryMapped,
     ) {
         let value = self.pop(memory);
         self.set_register_pair(register_pair, value);
@@ -407,7 +403,7 @@ impl CPU {
         &mut self,
         instruction: Instruction,
         enable_interrupts: bool,
-        memory: &impl Memory,
+        memory: &impl MemoryMapped,
     ) -> (ProgramCounter, Cycles) {
         if enable_interrupts {
             self.ime = true;
@@ -419,7 +415,7 @@ impl CPU {
         &mut self,
         condition: Condition,
         instruction: Instruction,
-        memory: &impl Memory,
+        memory: &impl MemoryMapped,
     ) -> (ProgramCounter, Cycles) {
         if self.eval_condition(condition) {
             (self.pop(memory), instruction.cycles_taken.unwrap())
@@ -435,7 +431,7 @@ impl CPU {
         &mut self,
         address: Address,
         instruction: Instruction,
-        memory: &mut impl Memory,
+        memory: &mut impl MemoryMapped,
     ) -> (ProgramCounter, Cycles) {
         let next_pc = self.pc.wrapping_add(instruction.bytes as u16);
         self.push(next_pc, memory);
@@ -447,7 +443,7 @@ impl CPU {
         condition: Condition,
         address: Address,
         instruction: Instruction,
-        memory: &mut impl Memory,
+        memory: &mut impl MemoryMapped,
     ) -> (ProgramCounter, Cycles) {
         let next_pc = self.pc.wrapping_add(instruction.bytes as u16);
         if self.eval_condition(condition) {
@@ -525,20 +521,20 @@ impl CPU {
         self.af.set_carry(carry);
     }
 
-    fn bit(&mut self, position: u8, register: Register, memory: &impl Memory) {
+    fn bit(&mut self, position: u8, register: Register, memory: &impl MemoryMapped) {
         let value = self.get_register(register, memory);
         self.af.set_zero(value & (1 << position) == 0);
         self.af.set_subtract(false);
         self.af.set_half_carry(true);
     }
 
-    fn reset_bit(&mut self, position: u8, register: Register, memory: &mut impl Memory) {
+    fn reset_bit(&mut self, position: u8, register: Register, memory: &mut impl MemoryMapped) {
         let value = self.get_register(register, memory);
         let new_value = value & !(1 << position);
         self.set_register(register, new_value, memory);
     }
 
-    fn swap(&mut self, register: Register, memory: &mut impl Memory) {
+    fn swap(&mut self, register: Register, memory: &mut impl MemoryMapped) {
         let value = self.get_register(register, memory);
         let new_value = (value & 0xF) << 4 | (value & 0xF0) >> 4;
         self.set_register(register, new_value, memory);
@@ -546,13 +542,18 @@ impl CPU {
         self.af.set_zero(new_value == 0);
     }
 
-    fn set_bit(&mut self, position: u8, register: Register, memory: &mut impl Memory) {
+    fn set_bit(&mut self, position: u8, register: Register, memory: &mut impl MemoryMapped) {
         let value = self.get_register(register, memory);
         let new_value = value | (1 << position);
         self.set_register(register, new_value, memory);
     }
 
-    fn rotate_left(&mut self, register: Register, memory: &mut impl Memory, set_zero_flag: bool) {
+    fn rotate_left(
+        &mut self,
+        register: Register,
+        memory: &mut impl MemoryMapped,
+        set_zero_flag: bool,
+    ) {
         let value = self.get_register(register, memory);
         let new_value = value << 1 | self.af.carry() as u8;
         self.set_register(register, new_value, memory);
@@ -564,7 +565,7 @@ impl CPU {
     fn rotate_left_circular(
         &mut self,
         register: Register,
-        memory: &mut impl Memory,
+        memory: &mut impl MemoryMapped,
         set_zero_flag: bool,
     ) {
         let value = self.get_register(register, memory);
@@ -575,7 +576,12 @@ impl CPU {
         self.af.set_carry(value & 0x80 > 0);
     }
 
-    fn rotate_right(&mut self, register: Register, memory: &mut impl Memory, set_zero_flag: bool) {
+    fn rotate_right(
+        &mut self,
+        register: Register,
+        memory: &mut impl MemoryMapped,
+        set_zero_flag: bool,
+    ) {
         let value = self.get_register(register, memory);
         let new_value = value >> 1 | (self.af.carry() as u8) << 7;
         self.set_register(register, new_value, memory);
@@ -587,7 +593,7 @@ impl CPU {
     fn rotate_right_circular(
         &mut self,
         register: Register,
-        memory: &mut impl Memory,
+        memory: &mut impl MemoryMapped,
         set_zero_flag: bool,
     ) {
         let value = self.get_register(register, memory);
@@ -598,7 +604,7 @@ impl CPU {
         self.af.set_carry(value & 0x1 > 0);
     }
 
-    fn shift_left(&mut self, register: Register, memory: &mut impl Memory) {
+    fn shift_left(&mut self, register: Register, memory: &mut impl MemoryMapped) {
         let value = self.get_register(register, memory);
         let new_value = value << 1;
         self.set_register(register, new_value, memory);
@@ -607,7 +613,7 @@ impl CPU {
         self.af.set_carry(value & 0x80 > 0);
     }
 
-    fn shift_right(&mut self, register: Register, memory: &mut impl Memory) {
+    fn shift_right(&mut self, register: Register, memory: &mut impl MemoryMapped) {
         let value = self.get_register(register, memory);
         let new_value = value >> 1 | (value & 0x80);
         self.set_register(register, new_value, memory);
@@ -616,7 +622,7 @@ impl CPU {
         self.af.set_carry(value & 0x1 > 0);
     }
 
-    fn shift_right_logic(&mut self, register: Register, memory: &mut impl Memory) {
+    fn shift_right_logic(&mut self, register: Register, memory: &mut impl MemoryMapped) {
         let value = self.get_register(register, memory);
         let new_value = value >> 1;
         self.set_register(register, new_value, memory);
@@ -648,7 +654,7 @@ impl CPU {
         self.af.set_half_carry(false);
     }
 
-    fn get_register(&self, register: Register, memory: &impl Memory) -> u8 {
+    fn get_register(&self, register: Register, memory: &impl MemoryMapped) -> u8 {
         match register {
             Register::A => self.af.high(),
             Register::B => self.bc.high(),
@@ -661,7 +667,7 @@ impl CPU {
         }
     }
 
-    fn set_register(&mut self, register: Register, value: u8, memory: &mut impl Memory) {
+    fn set_register(&mut self, register: Register, value: u8, memory: &mut impl MemoryMapped) {
         match register {
             Register::A => self.af.set_high(value),
             Register::B => self.bc.set_high(value),

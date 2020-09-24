@@ -1,2 +1,5 @@
 [workspace]
-members = ["goodboi-cpu"]
+members = [
+    "goodboi-cpu",
+    "goodboi-memory"
+]

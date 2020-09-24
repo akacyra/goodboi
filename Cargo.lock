@@ -11,9 +11,14 @@ name = "goodboi-cpu"
 version = "0.1.0"
 dependencies = [
  "bitfield",
+ "goodboi-memory",
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "goodboi-memory"
+version = "0.1.0"
 
 [[package]]
 name = "itoa"
